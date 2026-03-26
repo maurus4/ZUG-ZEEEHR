@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SBB | Live Monitor & Verbindungen</title>
+    <title>SBB | Live Verspätungs-Radar</title>
     <!-- Leaflet CSS für die Karte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -13,38 +13,37 @@
             --sbb-white: #FFFFFF;
             --sbb-light-grey: #F6F6F6;
             --sbb-grey: #666666;
-            --nordic-bg: #F9FAFB;
-            --border-radius: 4px;
+            --nordic-bg: #F0F2F5;
+            --border-radius: 2px;
         }
- 
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: "SBB Web", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
- 
+
         body {
             background-color: var(--nordic-bg);
             color: var(--sbb-anthracite);
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
-            overflow-x: hidden;
+            overflow: hidden;
         }
- 
+
         header {
             background-color: var(--sbb-white);
-            padding: 1.5rem 5%;
+            padding: 1rem 2rem;
             border-bottom: 1px solid #E5E5E5;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
-            top: 0;
             z-index: 1000;
+            flex-shrink: 0;
         }
- 
+
         .logo {
             font-weight: 900;
             font-size: 1.2rem;
@@ -52,534 +51,531 @@
             color: var(--sbb-red);
             text-transform: uppercase;
         }
- 
+
+        /* Dashboard Layout */
         main {
             flex: 1;
-            padding: 3rem 5%;
-            max-width: 1000px;
-            margin: 0 auto;
-            width: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
         }
- 
-        /* Hero Section für Verspätung */
-        .hero-section {
-            background: var(--sbb-white);
-            padding: 3rem 2rem;
+
+        /* Stats Overlay */
+        .stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem;
             border-radius: var(--border-radius);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            text-align: center;
-            margin-bottom: 3rem;
-            border-top: 4px solid var(--sbb-red);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-left: 4px solid var(--sbb-red);
+            width: 320px;
+            backdrop-filter: blur(5px);
         }
- 
+
         .label {
             text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 2px;
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            color: var(--sbb-grey);
+            margin-bottom: 0.5rem;
+            display: block;
+            font-weight: 700;
+        }
+
+        .count-value {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: var(--sbb-red);
+            line-height: 1;
+            cursor: pointer; /* NEU: Zeigt an, dass es klickbar ist */
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+
+        .count-value:hover {
+            transform: scale(1.05);
+        }
+
+        .sub-label {
+            font-size: 0.85rem;
             color: var(--sbb-grey);
             margin-bottom: 1rem;
-            display: block;
-            font-weight: 600;
         }
- 
-        .delay-value {
-            font-size: clamp(2.5rem, 8vw, 5rem);
-            font-weight: 900;
-            line-height: 1;
-            color: var(--sbb-red);
-            margin-bottom: 0.5rem;
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #e0e0e0;
         }
- 
-        .station-name {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--sbb-anthracite);
-            margin-bottom: 0.5rem;
+
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: var(--border-radius);
+            font-size: 0.8rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
         }
- 
-        .delay-details {
-            display: inline-flex;
-            gap: 1rem;
-            background: var(--sbb-light-grey);
-            padding: 0.8rem 1.5rem;
-            border-radius: 50px;
-            font-size: 0.9rem;
-            color: var(--sbb-anthracite);
-            margin-top: 1rem;
-            flex-wrap: wrap;
-            justify-content: center;
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
         }
- 
-        .badge-train {
-            background: var(--sbb-anthracite);
-            color: white;
-            padding: 0.2rem 0.6rem;
-            border-radius: 3px;
+
+        .dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* Custom Popup Styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: var(--border-radius);
+            padding: 5px;
+        }
+
+        .train-popup-title {
             font-weight: bold;
-            font-size: 0.8rem;
+            color: var(--sbb-red);
+            border-bottom: 1px solid #eee;
+            margin-bottom: 5px;
+            padding-bottom: 2px;
         }
- 
-        /* Team Banner / Hero Image */
-        .team-banner {
+
+        /* --- NEUE CSS KLASSEN FÜR BAHNHOFS-LABELS & POPUPS --- */
+        .hub-label {
+            background: transparent;
+            border: none;
+            padding: 0;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--sbb-grey); /* Hier von --sbb-anthracite auf --sbb-grey gewechselt */
+            text-align: center;
+            white-space: nowrap;
+            /* Weisser Halo-Effekt für Lesbarkeit direkt auf der Karte */
+            text-shadow: 
+                -1.5px -1.5px 0 #fff,  
+                 1.5px -1.5px 0 #fff,
+                -1.5px  1.5px 0 #fff,
+                 1.5px  1.5px 0 #fff,
+                 0px 0px 5px rgba(255,255,255,0.8);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .hub-label:hover {
+            color: var(--sbb-red);
+            transform: scale(1.1);
+            text-shadow: 
+                -1.5px -1.5px 0 #fff,  
+                 1.5px -1.5px 0 #fff,
+                -1.5px  1.5px 0 #fff,
+                 1.5px  1.5px 0 #fff,
+                 0px 0px 8px rgba(255,255,255,1);
+        }
+
+        .station-popup {
+            display: flex;
+            gap: 15px;
+            min-width: 280px;
+        }
+
+        .station-popup-col {
+            flex: 1;
+        }
+
+        @media (max-width: 600px) {
+            .stats-panel {
+                width: calc(100% - 40px);
+                top: 10px;
+                left: 20px;
+            }
+        }
+
+        /* --- NEU: MODAL FÜR VERSÜTUNGSLISTE --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            margin-bottom: 3rem;
+            height: 100%;
+            background: rgba(45, 45, 45, 0.6);
+            backdrop-filter: blur(3px);
+            z-index: 2000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--sbb-white);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
             border-radius: var(--border-radius);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            background-color: var(--sbb-white);
-            border-top: 4px solid var(--sbb-red);
         }
- 
-        .team-banner img {
-            width: 100%;
-            height: auto;
-            max-height: 450px;
-            object-fit: cover;
-            display: block;
-        }
- 
-        /* Connection Search Section */
-        .search-container {
-            background: var(--sbb-white);
-            padding: 2.5rem;
-            border-radius: var(--border-radius);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            margin-bottom: 3rem;
-        }
- 
-        .search-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr auto;
-            gap: 1.5rem;
-            align-items: end;
-        }
- 
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
- 
-        .input-group label {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: var(--sbb-grey);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
- 
-        input {
-            padding: 1rem 1.2rem;
-            border: 1px solid #E5E5E5;
-            border-radius: var(--border-radius);
-            font-size: 1.1rem;
-            outline: none;
-            transition: all 0.2s;
-            background: var(--nordic-bg);
-        }
- 
-        input:focus {
-            border-color: var(--sbb-red);
-            background: var(--sbb-white);
-            box-shadow: 0 0 0 3px rgba(235, 0, 0, 0.1);
-        }
- 
-        /* Results List */
-        #connection-results {
-            margin-top: 2.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
- 
-        .connection-card {
-            border: 1px solid #E5E5E5;
-            border-radius: var(--border-radius);
+
+        .modal-header {
             padding: 1.5rem;
+            border-bottom: 1px solid #E5E5E5;
             display: flex;
             justify-content: space-between;
             align-items: center;
             background: var(--sbb-white);
-            transition: transform 0.2s, box-shadow 0.2s;
         }
- 
-        .connection-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-            border-color: #D1D1D1;
-        }
- 
-        .journey-main {
-            display: flex;
-            align-items: center;
-            gap: 2rem;
-            flex: 1;
-        }
- 
-        .time-block {
-            display: flex;
-            flex-direction: column;
-        }
- 
-        .time {
-            font-size: 1.5rem;
+
+        .modal-title {
             font-weight: 700;
             color: var(--sbb-anthracite);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 1.2rem;
         }
- 
-        .delay-text {
-            color: var(--sbb-red);
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
- 
-        .station {
-            color: var(--sbb-grey);
-            font-size: 0.9rem;
-            margin-top: 0.2rem;
-        }
- 
-        .platform {
-            font-size: 0.85rem;
-            color: var(--sbb-anthracite);
-            font-weight: 600;
-            background: var(--sbb-light-grey);
-            padding: 0.1rem 0.4rem;
-            border-radius: 2px;
-            margin-top: 0.3rem;
-            display: inline-block;
-            width: fit-content;
-        }
- 
-        .journey-arrow {
-            color: #CCC;
+
+        .close-btn {
+            background: none;
+            border: none;
             font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--sbb-grey);
+            line-height: 1;
         }
- 
-        .journey-meta {
-            text-align: right;
+
+        .close-btn:hover {
+            color: var(--sbb-red);
+        }
+
+        .modal-body {
+            padding: 0;
+            overflow-y: auto;
+            background: var(--nordic-bg);
+        }
+
+        .delay-list-item {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #E5E5E5;
+            background: var(--sbb-white);
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
-            min-width: 120px;
+            gap: 5px;
         }
- 
-        .meta-text {
-            font-size: 0.9rem;
-            color: var(--sbb-grey);
-        }
- 
-        .products {
-            display: flex;
-            gap: 0.3rem;
-            justify-content: flex-end;
-            flex-wrap: wrap;
-        }
- 
-        /* Map Styling */
-        #map-container {
-            height: 350px;
-            width: 100%;
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-            background: #eee;
-            border: 1px solid #E5E5E5;
-        }
- 
-        #map { height: 100%; width: 100%; }
- 
-        /* Buttons */
-        .btn {
-            background-color: var(--sbb-anthracite);
-            color: white;
-            border: none;
-            padding: 1rem 2rem;
-            border-radius: var(--border-radius);
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
- 
-        .btn:hover { background-color: #000; }
- 
-        .btn-red { background-color: var(--sbb-red); }
-        .btn-red:hover { background-color: #c00000; }
- 
-        @media (max-width: 768px) {
-            .search-grid { grid-template-columns: 1fr; }
-            .connection-card { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
-            .journey-main { width: 100%; justify-content: space-between; }
-            .journey-meta { text-align: left; width: 100%; flex-direction: row; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 1rem;}
+
+        .delay-list-item:last-child {
+            border-bottom: none;
         }
     </style>
 </head>
 <body>
- 
+
     <header>
-        <div class="logo">SBB CFF FFS</div>
-        <button onclick="fetchDelays()" class="btn" style="padding: 0.6rem 1.2rem; font-size: 0.8rem;">Live Radar Update</button>
-    </header>
- 
-    <main>
-        <!-- Team Banner Image -->
-        <div class="team-banner">
-            <img src="ChatGPT Image 19. März 2026, 16_48_03.jpg" alt="ANGINF - Wir führen die Informatik in die Zukunft" onerror="this.style.display='none'">
+        <div class="logo">SBB CFF FFS | Live Radar</div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="last-update" style="font-size: 0.75rem; color: var(--sbb-grey);">Aktualisierung...</span>
+            <button onclick="updateRadar()" class="btn" style="background: var(--sbb-red); color: white; border: none; padding: 0.5rem 1rem; cursor: pointer; font-weight: 600; font-size: 0.8rem;">Radar Refresh</button>
         </div>
- 
-        <!-- Top Delay Monitor -->
-        <section class="hero-section">
-            <span class="label">Aktueller Störungsschwerpunkt</span>
-            <div id="delay-display" class="delay-value">Lädt...</div>
-            <div id="station-display" class="station-name">System scannt Netzwerk</div>
-            <div id="detail-display" class="delay-details" style="display: none;">
-                <!-- Dynamisch gefüllt -->
+    </header>
+
+    <main>
+        <div class="stats-panel">
+            <span class="label">Netzwerk-Status</span>
+            <!-- NEU: onclick Event hinzugefügt -->
+            <div id="delayed-count" class="count-value" onclick="openDelayModal()">0</div>
+            <div class="sub-label">Züge mit > 5 Min. Verspätung</div>
+            <div id="worst-connection" style="font-size: 0.85rem; border-top: 1px solid #eee; padding-top: -2px; margin-top: 10px; padding-top: 10px;">
+                Scanne SBB Kernnetz...
             </div>
-        </section>
- 
-        <!-- Connection Search -->
-        <section class="search-container">
-            <h2 style="margin-bottom: 2rem; font-size: 1.4rem; font-weight: 600; color: var(--sbb-anthracite);">Fahrplan & Tickets</h2>
-            <div class="search-grid">
-                <div class="input-group">
-                    <label>Von</label>
-                    <input type="text" id="from-station" placeholder="z.B. Zürich HB" value="Bern">
-                </div>
-                <div class="input-group">
-                    <label>Nach</label>
-                    <input type="text" id="to-station" placeholder="z.B. Bern" value="Zürich HB">
-                </div>
-                <button onclick="findConnections()" class="btn btn-red">Verbindung suchen</button>
-            </div>
- 
-            <div id="connection-results">
-                <!-- Dynamische Ergebnisse hier -->
-            </div>
-        </section>
- 
-        <!-- Map Section -->
-        <span class="label" style="margin-bottom: 1rem;">Live Netzwerk-Radar</span>
-        <div id="map-container">
-            <div id="map"></div>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="legend">
+            <div class="legend-item"><span class="dot" style="background: var(--sbb-red);"></span> Verspätung > 5 Min.</div>
+            <div class="legend-item"><span class="dot" style="background: #00a650;"></span> Pünktlich / < 5 Min.</div>
+            <div class="legend-item"><div style="width: 15px; height: 2px; background: #666;"></div> Hauptlinien</div>
         </div>
     </main>
- 
+
+    <!-- NEU: HTML Struktur für das Modal (vor den Scripts) -->
+    <div id="delayModal" class="modal-overlay" onclick="closeDelayModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title">Aktuelle Verspätungen (> 5 Min.)</div>
+                <button class="close-btn" onclick="closeDelayModal()">&times;</button>
+            </div>
+            <div id="delay-list-container" class="modal-body">
+                <!-- Wird per JS dynamisch abgefüllt -->
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const HUBS = ["Zürich HB", "Bern", "Basel SBB", "Lausanne", "Genève", "Luzern", "St. Gallen", "Lugano", "Olten", "Winterthur"];
+        // Konfiguration der Hubs für die Überwachung
+        const HUBS = [
+            { name: "Zürich HB", coords: [47.3781, 8.5401] },
+            { name: "Bern", coords: [46.9488, 7.4391] },
+            { name: "Basel SBB", coords: [47.5474, 7.5895] },
+            { name: "Lausanne", coords: [46.5168, 6.6291] },
+            { name: "Genève", coords: [46.2102, 6.1425] },
+            { name: "Luzern", coords: [47.0493, 8.3103] },
+            { name: "St. Gallen", coords: [47.4223, 9.3697] },
+            { name: "Lugano", coords: [46.0037, 8.9472] },
+            { name: "Olten", coords: [47.3520, 7.9077] },
+            { name: "Winterthur", coords: [47.5005, 8.7236] },
+            { name: "Chur", coords: [46.8539, 9.5303] },
+            { name: "Biel/Bienne", coords: [47.1327, 7.2431] }
+        ];
+
         let map;
         let markers = [];
- 
+        let polylines = {}; // KORREKTUR: Von Array [] zu Objekt {} für Key-Value Speicherung
+        let delayedTrainsList = []; 
+
         function initMap() {
-            map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.8182, 8.2275], 8);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+            map = L.map('map', { 
+                zoomControl: true, 
+                attributionControl: false 
+            }).setView([46.8182, 8.2275], 8);
+
+            // Minimalistisches Kartendesign OHNE integrierte Text-Labels
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png').addTo(map);
+
+            // Zeichne statische Hauptlinien (vereinfacht)
+            drawMainLines();
         }
- 
-        // --- HILFSFUNKTIONEN ---
-        function formatTime(isoString) {
-            if (!isoString) return '';
-            const date = new Date(isoString);
-            return date.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+
+        function drawMainLines() {
+            // Verbindungslinien zwischen den Hubs zur Visualisierung des Netzes
+            const connections = [
+                ["Zürich HB", "Bern"], ["Bern", "Lausanne"], ["Lausanne", "Genève"],
+                ["Zürich HB", "Basel SBB"], ["Zürich HB", "Luzern"], ["Bern", "Luzern"],
+                ["Zürich HB", "St. Gallen"], ["Zürich HB", "Winterthur"], ["Winterthur", "St. Gallen"],
+                ["Zürich HB", "Chur"], ["Luzern", "Lugano"], ["Bern", "Olten"], ["Olten", "Basel SBB"],
+                ["Olten", "Zürich HB"], ["Bern", "Biel/Bienne"], ["Biel/Bienne", "Basel SBB"]
+            ];
+
+            connections.forEach(conn => {
+                const h1 = HUBS.find(h => h.name === conn[0]);
+                const h2 = HUBS.find(h => h.name === conn[1]);
+                if (h1 && h2) {
+                    const line = L.polyline([h1.coords, h2.coords], {
+                        color: '#bbb', // Standardfarbe (Normalbetrieb)
+                        weight: 2,
+                        opacity: 0.5,
+                        dashArray: '5, 10'
+                    }).addTo(map);
+
+                    // NEU: Linie bidirektional indexieren für späteren schnellen Zugriff
+                    const routeId1 = `${conn[0]}-${conn[1]}`;
+                    const routeId2 = `${conn[1]}-${conn[0]}`;
+                    polylines[routeId1] = line;
+                    polylines[routeId2] = line;
+                }
+            });
         }
- 
-        function formatDuration(durationStr) {
-            // SBB API Duration format: "00d00:56:00"
-            if (!durationStr) return '';
-            const match = durationStr.match(/(\d+)d(\d+):(\d+):(\d+)/);
-            if (match) {
-                const hours = parseInt(match[2], 10);
-                const minutes = parseInt(match[3], 10);
-                if (hours > 0) return `${hours} h ${minutes} min`;
-                return `${minutes} min`;
-            }
-            return durationStr;
-        }
- 
-        // --- VERSPÄTUNGS-MONITOR LOGIK ---
-        async function fetchDelays() {
-            const delayDisplay = document.getElementById('delay-display');
-            const stationDisplay = document.getElementById('station-display');
-            const detailDisplay = document.getElementById('detail-display');
+
+        async function updateRadar() {
+            const countDisplay = document.getElementById('delayed-count');
+            const worstDisplay = document.getElementById('worst-connection');
+            const timeDisplay = document.getElementById('last-update');
             
+            let totalDelayed = 0;
+            let maxDelay = 0;
+            let worstTrain = null;
+
+            // Bestehende Marker entfernen
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            delayedTrainsList = []; // NEU: Liste bei jedem Refresh leeren
+
+            timeDisplay.innerText = "Aktualisiere...";
+
             try {
-                const requests = HUBS.map(hub =>
-                    fetch(`https://transport.opendata.ch/v1/stationboard?station=${encodeURIComponent(hub)}&limit=15`)
-                    .then(res => res.json()).catch(() => null)
+                const requests = HUBS.map(hub => 
+                    fetch(`https://transport.opendata.ch/v1/stationboard?station=${encodeURIComponent(hub.name)}&limit=40`)
+                    .then(res => res.json())
+                    .catch(() => null)
                 );
- 
+
                 const results = await Promise.all(requests);
-                
-                // Alte Marker von der Karte entfernen
-                markers.forEach(m => map.removeLayer(m));
-                markers = [];
- 
-                let globalMaxDelay = -1;
-                let globalWorstTrain = null;
- 
-                results.forEach(data => {
+
+                results.forEach((data, index) => {
                     if (!data || !data.stationboard) return;
-                    
+
+                    const hubCoords = HUBS[index].coords;
+                    let hubHasCriticalDelay = false;
                     let hubMaxDelay = 0;
-                    let hubWorstTrain = null;
- 
+                    let delayedTrainsCount = 0;
+
                     data.stationboard.forEach(train => {
-                        const delay = parseInt(train.prognosis?.delay) || 0;
-                        if (delay > hubMaxDelay && delay < 300) {
-                            hubMaxDelay = delay;
-                            hubWorstTrain = {
-                                station: data.station.name,
-                                destination: train.to,
+                        // KORREKTUR: Datenstruktur der API korrekt auslesen (stop.delay)
+                        const delay = parseInt(train.stop?.delay) || 0;
+                        
+                        // Nur Züge mit > 5 Minuten Verspätung markieren
+                        if (delay > 5) {
+                            // NEU: Zug für das Modal zwischenspeichern
+                            delayedTrainsList.push({
                                 category: train.category,
                                 number: train.number,
-                                scheduled: train.stop?.departure,
-                                expected: train.prognosis?.departure,
-                                coords: [data.station.coordinate.x, data.station.coordinate.y]
-                            };
+                                from: data.station.name,
+                                to: train.to,
+                                plannedDep: train.stop?.departure,
+                                expectedDep: train.stop?.prognosis?.departure,
+                                delay: delay
+                            });
+
+                            totalDelayed++;
+                            delayedTrainsCount++;
+                            hubHasCriticalDelay = true;
+                            
+                            if (delay > hubMaxDelay) hubMaxDelay = delay;
+
+                            if (delay > maxDelay) {
+                                maxDelay = delay;
+                                worstTrain = {
+                                    name: `${train.category}${train.number}`,
+                                    from: data.station.name,
+                                    to: train.to,
+                                    delay: delay
+                                };
+                            }
+
+                            // Erstelle Marker für verspäteten Zug leicht versetzt vom Bahnhof
+                            const offsetCoords = [
+                                hubCoords[0] + (Math.random() - 0.5) * 0.1,
+                                hubCoords[1] + (Math.random() - 0.5) * 0.1
+                            ];
+
+                            const m = L.circleMarker(offsetCoords, {
+                                radius: 8 + (delay / 5), // Grösse korreliert mit Verspätung
+                                fillColor: "var(--sbb-red)",
+                                color: "#fff",
+                                weight: 1,           // Reduziert von 2 auf 1 für einen feineren Rand
+                                fillOpacity: 0.4     // Reduziert von 0.8 auf 0.4 (deutlich transparenter)
+                            }).addTo(map);
+
+                            m.bindPopup(`
+                                <div class="train-popup-title">${train.category}${train.number}</div>
+                                <b>Verspätung: <span style="color:var(--sbb-red)">+${delay} Min.</span></b><br>
+                                Endstation: ${train.to}<br>
+                                Stand: ${data.station.name}
+                            `);
+                            markers.push(m);
                         }
                     });
- 
-                    // Koordinaten des Bahnhofs (auch wenn keine Verspätung)
-                    const coords = [data.station.coordinate.x, data.station.coordinate.y];
+
+                    // --- BAHNHOFS-LABEL & ERWEITERTES POPUP (Ersetzt die grünen Punkte) ---
                     
-                    // Marker auf der Karte platzieren (Grün für OK, Rot für Verspätung)
-                    const isDelayed = hubMaxDelay > 0;
-                    const markerColor = isDelayed ? "#EB0000" : "#00a650"; // SBB Rot oder SBB Pünktlichkeits-Grün
-                    const markerRadius = isDelayed ? 12 : 6;
- 
-                    const m = L.circleMarker(coords, {
-                        radius: markerRadius,
-                        fillColor: markerColor,
-                        color: "#fff",
-                        weight: 2,
-                        fillOpacity: 0.9
-                    }).addTo(map);
- 
-                    if (isDelayed) {
-                        m.bindPopup(`<b>${data.station.name}</b><br>Grösste Verspätung: +${hubMaxDelay} Min.<br>${hubWorstTrain.category} ${hubWorstTrain.number}`);
-                        
-                        // Checken ob es die absolut grösste Verspätung schweizweit ist
-                        if (hubMaxDelay > globalMaxDelay) {
-                            globalMaxDelay = hubMaxDelay;
-                            globalWorstTrain = hubWorstTrain;
-                        }
-                    } else {
-                        m.bindPopup(`<b>${data.station.name}</b><br>Keine nennenswerten Verspätungen.`);
-                    }
+                    // 1. Endende Züge filtern
+                    const terminatingTrains = data.stationboard.filter(t => t.to.includes(data.station.name) || data.station.name.includes(t.to));
+                    const trainsHtml = terminatingTrains.length > 0 
+                        ? terminatingTrains.map(t => `<div style="font-size: 0.8rem; margin-bottom: 3px;">• ${t.category}${t.number}</div>`).join('')
+                        : '<div style="font-size: 0.8rem; color: var(--sbb-grey);">Keine gelisteten Endzüge (nächste 15 Min)</div>';
+
+                    // 2. Status-Heuristik berechnen
+                    const hasMajorIssues = hubMaxDelay >= 10 || delayedTrainsCount >= 2;
+                    const statusHtml = hasMajorIssues 
+                        ? '<strong style="color: var(--sbb-red);">Grosse Einschränkungen</strong><br><span style="font-size:0.8rem;">Erhöhte Verspätungswerte aktiv</span>' 
+                        : '<strong style="color: #00a650;">Normalbetrieb</strong><br><span style="font-size:0.8rem;">Regulärer Verkehrsfluss</span>';
+
+                    // 3. Text-Marker generieren
+                    const hubIcon = L.divIcon({
+                        className: 'hub-label',
+                        html: data.station.name,
+                        iconSize: null // Passt sich dem Text an
+                    });
+
+                    const hubMarker = L.marker(hubCoords, { icon: hubIcon }).addTo(map);
                     
-                    markers.push(m);
+                    hubMarker.bindPopup(`
+                        <div class="train-popup-title" style="color: var(--sbb-anthracite);">${data.station.name}</div>
+                        <div class="station-popup">
+                            <div class="station-popup-col">
+                                <strong style="font-size: 0.85rem;">Endstation für:</strong><br>
+                                <div style="margin-top: 5px;">${trainsHtml}</div>
+                            </div>
+                            <div class="station-popup-col" style="border-left: 1px solid #eee; padding-left: 10px;">
+                                <strong style="font-size: 0.85rem;">Status:</strong><br>
+                                <div style="margin-top: 5px;">${statusHtml}</div>
+                            </div>
+                        </div>
+                    `);
+                    markers.push(hubMarker);
                 });
- 
-                // Top Banner updaten
-                if (globalWorstTrain && globalMaxDelay > 0) {
-                    delayDisplay.innerText = `+${globalMaxDelay} min`;
-                    delayDisplay.style.color = "var(--sbb-red)";
-                    stationDisplay.innerText = globalWorstTrain.station;
-                    
-                    detailDisplay.style.display = 'inline-flex';
-                    detailDisplay.innerHTML = `
-                        <span class="badge-train">${globalWorstTrain.category} ${globalWorstTrain.number}</span>
-                        <span>Richtung <strong>${globalWorstTrain.destination}</strong></span>
-                        <span style="border-left: 1px solid #ccc; padding-left: 1rem;">
-                            Geplant: ${formatTime(globalWorstTrain.scheduled)} | Erwartet: <strong>${formatTime(globalWorstTrain.expected)}</strong>
-                        </span>
-                    `;
-                    
-                    // Karte auf das grösste Problem zentrieren
-                    map.flyTo(globalWorstTrain.coords, 10, { duration: 1.5 });
+
+                // UI Update
+                countDisplay.innerText = totalDelayed;
+                if (worstTrain) {
+                    worstDisplay.innerHTML = `<strong>Max: +${worstTrain.delay} Min</strong><br>${worstTrain.name} nach ${worstTrain.to}`;
                 } else {
-                    delayDisplay.innerText = `Pünktlich`;
-                    delayDisplay.style.color = "#00a650"; // Grün wenn alles ok
-                    stationDisplay.innerText = "Alle überwachten Knotenpunkte laufen nach Plan.";
-                    detailDisplay.style.display = 'none';
-                    
-                    // Karte auf die ganze Schweiz zentrieren, wenn alles OK ist
-                    map.flyTo([46.8182, 8.2275], 8, { duration: 1.5 });
+                    worstDisplay.innerHTML = "Keine Verspätungen > 5 Min. verzeichnet.";
                 }
-            } catch (e) { console.error(e); }
-        }
- 
-        // --- VERBINDUNGSSUCHE LOGIK ---
-        async function findConnections() {
-            const from = document.getElementById('from-station').value;
-            const to = document.getElementById('to-station').value;
-            const resultsDiv = document.getElementById('connection-results');
- 
-            if (!from || !to) return;
- 
-            resultsDiv.innerHTML = '<p style="padding: 2rem; text-align: center; color: var(--sbb-grey);">Suche Fahrplandaten...</p>';
- 
-            try {
-                const response = await fetch(`https://transport.opendata.ch/v1/connections?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=5`);
-                const data = await response.json();
                 
-                resultsDiv.innerHTML = '';
- 
-                if (!data.connections || data.connections.length === 0) {
-                    resultsDiv.innerHTML = '<p style="padding: 2rem; text-align: center;">Keine Verbindungen gefunden.</p>';
-                    return;
-                }
- 
-                data.connections.forEach(conn => {
-                    // Zeiten
-                    const depTime = formatTime(conn.from.departure);
-                    const arrTime = formatTime(conn.to.arrival);
-                    
-                    // Verspätungen prüfen
-                    const depDelayStr = conn.from.delay ? `<span class="delay-text">+${conn.from.delay}'</span>` : '';
-                    const arrDelayStr = conn.to.delay ? `<span class="delay-text">+${conn.to.delay}'</span>` : '';
- 
-                    // Gleise / Plattform
-                    const depPlatform = conn.from.platform ? `<div class="platform">Gl. ${conn.from.platform}</div>` : '';
-                    const arrPlatform = conn.to.platform ? `<div class="platform">Gl. ${conn.to.platform}</div>` : '';
- 
-                    // Metadaten
-                    const duration = formatDuration(conn.duration);
-                    const transfers = conn.transfers === 0 ? 'Direkt' : `${conn.transfers}x Umsteigen`;
-                    
-                    // Verwendete Züge (Products)
-                    const productsHtml = conn.products ? conn.products.map(p => `<span class="badge-train">${p}</span>`).join('') : '';
- 
-                    const item = document.createElement('div');
-                    item.className = 'connection-card';
-                    item.innerHTML = `
-                        <div class="journey-main">
-                            <div class="time-block">
-                                <div class="time">${depTime} ${depDelayStr}</div>
-                                <div class="station">${conn.from.station.name}</div>
-                                ${depPlatform}
-                            </div>
-                            
-                            <div class="journey-arrow">➔</div>
-                            
-                            <div class="time-block">
-                                <div class="time">${arrTime} ${arrDelayStr}</div>
-                                <div class="station">${conn.to.station.name}</div>
-                                ${arrPlatform}
-                            </div>
-                        </div>
-                        
-                        <div class="journey-meta">
-                            <div class="meta-text"><strong>${duration}</strong></div>
-                            <div class="meta-text">${transfers}</div>
-                            <div class="products" style="margin-top: 0.5rem;">${productsHtml}</div>
-                        </div>
-                    `;
-                    resultsDiv.appendChild(item);
-                });
- 
+                timeDisplay.innerText = "Stand: " + new Date().toLocaleTimeString('de-CH');
+
             } catch (error) {
-                resultsDiv.innerHTML = '<p style="padding: 2rem; color: var(--sbb-red); text-align: center;">Fehler bei der Verbindungssuche.</p>';
+                console.error("Radar-Fehler:", error);
+                timeDisplay.innerText = "Fehler!";
             }
         }
- 
+
+        // --- NEU: MODAL STEUERUNG FÜR VERSÜTUNGSLISTE ---
+        function openDelayModal() {
+            const container = document.getElementById('delay-list-container');
+            container.innerHTML = '';
+
+            if (delayedTrainsList.length === 0) {
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--sbb-grey);">Aktuell keine Verspätungen > 5 Min.</div>';
+            } else {
+                // Liste absteigend nach Verspätung sortieren
+                delayedTrainsList.sort((a, b) => b.delay - a.delay);
+
+                delayedTrainsList.forEach(train => {
+                    const plannedTime = train.plannedDep ? new Date(train.plannedDep).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                    const expectedTime = train.expectedDep ? new Date(train.expectedDep).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+                    container.innerHTML += `
+                        <div class="delay-list-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong>${train.category} ${train.number}</strong>
+                                <span style="color: var(--sbb-red); font-weight: bold;">+${train.delay}'</span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--sbb-anthracite);">
+                                Von: <strong>${train.from}</strong> ➔ Nach: <strong>${train.to}</strong>
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--sbb-grey); margin-top: 4px;">
+                                Geplante Abfahrt: ${plannedTime} | Erwartet: <span style="color: var(--sbb-red);">${expectedTime}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            document.getElementById('delayModal').style.display = 'flex';
+        }
+
+        // Event-Parameter prüfen, um Schliessen beim Klick auf den Hintergrund (Overlay) zu ermöglichen
+        function closeDelayModal(event) {
+            if (event && event.target.id !== 'delayModal' && event.type === 'click') return;
+            document.getElementById('delayModal').style.display = 'none';
+        }
+
         window.onload = () => {
             initMap();
-            fetchDelays();
-            findConnections(); // Führt initial eine Suche Bern -> Zürich aus, damit die Seite nicht leer ist
+            updateRadar();
+            // Automatischer Refresh alle 60 Sekunden
+            setInterval(updateRadar, 60000);
         };
     </script>
 </body>
