@@ -4,16 +4,25 @@ services:
     ports:
       - "5000:5000"
       
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+      - db
+      
   db:
     image: mysql:8.0
     restart: always
     environment:
       MYSQL_DATABASE: 'sbb_data'
-      MYSQL_ROOT_PASSWORD: 'AngInf26' # Für lokale Entwicklung okay
+      MYSQL_ROOT_PASSWORD: 'password123'
     ports:
       - "3306:3306"
     volumes:
-      # Hier wird das SQL-Skript beim Start ausgeführt:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
-      # Hier werden die Daten permanent auf deinem PC gespeichert:
       - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
