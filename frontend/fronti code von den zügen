@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SBB | Live Verspätungs-Radar</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --sbb-red: #EB0000;
+            --sbb-anthracite: #2D2D2D;
+            --sbb-white: #FFFFFF;
+            --sbb-light-grey: #F6F6F6;
+            --sbb-grey: #666666;
+            --nordic-bg: #F0F2F5;
+            --border-radius: 2px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "SBB Web", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--nordic-bg);
+            color: var(--sbb-anthracite);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--sbb-white);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #E5E5E5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-weight: 900;
+            font-size: 1.2rem;
+            letter-spacing: -0.5px;
+            color: var(--sbb-red);
+            text-transform: uppercase;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-left: 4px solid var(--sbb-red);
+            width: 320px;
+            backdrop-filter: blur(5px);
+        }
+
+        .label {
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            color: var(--sbb-grey);
+            margin-bottom: 0.5rem;
+            display: block;
+            font-weight: 700;
+        }
+
+        .count-value {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: var(--sbb-red);
+            line-height: 1;
+        }
+
+        .sub-label {
+            font-size: 0.85rem;
+            color: var(--sbb-grey);
+            margin-bottom: 1rem;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #e0e0e0;
+        }
+
+        .leaflet-popup-content-wrapper {
+            border-radius: var(--border-radius);
+            padding: 5px;
+        }
+
+        .train-popup-title {
+            font-weight: bold;
+            color: var(--sbb-red);
+            border-bottom: 1px solid #eee;
+            margin-bottom: 5px;
+            padding-bottom: 2px;
+        }
+
+        /* Styling für die neuen Buttons */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            border: none;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border-radius: var(--border-radius);
+            transition: all 0.2s;
+        }
+
+        .btn-sync {
+            background-color: var(--sbb-light-grey);
+            color: var(--sbb-anthracite);
+            border: 1px solid #ccc;
+        }
+
+        .btn-sync:hover {
+            background-color: #e0e0e0;
+        }
+
+        .btn-live {
+            background-color: var(--sbb-red);
+            color: var(--sbb-white);
+        }
+
+        .btn-live:hover {
+            background-color: #cc0000;
+        }
+
+        @media (max-width: 600px) {
+            .stats-panel {
+                width: calc(100% - 40px);
+                top: 10px;
+                left: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">SBB CFF FFS | Live Radar</div>
+        <div class="btn-group">
+            <span id="status-text" style="font-size: 0.75rem; color: var(--sbb-grey);">Bereit</span>
+            <button onclick="triggerBackendSync()" class="btn btn-sync">1. Daten via Backend synchronisieren</button>
+            <button onclick="loadDelaysFromBackend()" class="btn btn-live">2. Live Verspätungen anzeigen</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="stats-panel">
+            <span class="label">Netzwerk-Status</span>
+            <div id="delayed-count" class="count-value">0</div>
+            <div class="sub-label">Verspätete Züge (Live)</div>
+            <div id="worst-connection" style="font-size: 0.85rem; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;">
+                Warte auf Datenabruf...
+            </div>
+        </div>
+
+        <div id="map"></div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // DIE EINZIGE URL, DIE DAS FRONTEND KENNT: DEIN BACKEND
+        const BACKEND_URL = 'http://localhost:8080';
+        
+        let map;
+        let markers = [];
+
+        function initMap() {
+            // Initialisiert die Karte zentriert auf die Schweiz
+            map = L.map('map', { 
+                zoomControl: true, 
+                attributionControl: false 
+            }).setView([46.8182, 8.2275], 8);
+
+            // Lädt die Kacheln für die Karte
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png').addTo(map);
+        }
+
+        // --- FUNKTION 1: Backend anweisen, die API anzufragen ---
+        async function triggerBackendSync() {
+            const statusText = document.getElementById('status-text');
+            statusText.innerText = "Backend ruft API ab...";
+            
+            try {
+                // Frontend ruft NUR das Backend auf
+                const response = await fetch(`${BACKEND_URL}/sync-trains`);
+                const data = await response.json();
+                
+                statusText.innerText = "Sync erfolgreich!";
+                console.log("Backend Antwort:", data.message);
+                
+                // Lade direkt danach die neuen Daten auf die Karte
+                loadDelaysFromBackend();
+            } catch (error) {
+                console.error("Fehler bei der Backend-Kommunikation:", error);
+                statusText.innerText = "Fehler beim Sync!";
+            }
+        }
+
+        // --- FUNKTION 2: Daten aus der Backend-Datenbank abrufen und anzeigen ---
+        async function loadDelaysFromBackend() {
+            const statusText = document.getElementById('status-text');
+            const countDisplay = document.getElementById('delayed-count');
+            const worstDisplay = document.getElementById('worst-connection');
+            
+            statusText.innerText = "Lade Daten aus Backend...";
+
+            // Vorhandene Marker von der Karte löschen
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+
+            try {
+                // Frontend holt Daten NUR aus dem Backend (view-live Route)
+                const response = await fetch(`${BACKEND_URL}/view-live`);
+                const trains = await response.json();
+                
+                let delayedCount = 0;
+                let maxDelay = 0;
+                let worstTrain = null;
+
+                trains.forEach(train => {
+                    const delay = parseInt(train.delay) || 0;
+                    
+                    // Wir filtern nach Zügen, die tatsächlich Verspätung haben
+                    if (delay > 0) {
+                        delayedCount++;
+                        
+                        // Schlimmste Verspätung ermitteln
+                        if (delay > maxDelay) {
+                            maxDelay = delay;
+                            worstTrain = train;
+                        }
+
+                        // Zug auf der Karte einzeichnen (nutzt die Koordinaten aus der Datenbank)
+                        if (train.latitude && train.longitude) {
+                            const marker = L.circleMarker([train.latitude, train.longitude], {
+                                radius: 8 + (delay / 4), // Grösse abhängig von der Verspätung
+                                fillColor: "var(--sbb-red)",
+                                color: "#fff",
+                                weight: 2,
+                                fillOpacity: 0.7
+                            }).addTo(map);
+
+                            // Popup mit Infos aus dem Backend
+                            marker.bindPopup(`
+                                <div class="train-popup-title">${train.trip_id.split('_')[0]}</div>
+                                <b>Verspätung: <span style="color:var(--sbb-red)">+${delay} Min.</span></b><br>
+                                Von: ${train.origin}<br>
+                                Nach: ${train.destination}
+                            `);
+                            
+                            markers.push(marker);
+                        }
+                    }
+                });
+
+                // UI-Statistiken aktualisieren
+                countDisplay.innerText = delayedCount;
+                if (worstTrain) {
+                    const trainName = worstTrain.trip_id.split('_')[0];
+                    worstDisplay.innerHTML = `<strong>Grösste Verspätung: +${maxDelay} Min</strong><br>${trainName} nach ${worstTrain.destination}`;
+                } else {
+                    worstDisplay.innerHTML = "Aktuell keine Verspätungen im System.";
+                }
+
+                statusText.innerText = "Live-Ansicht aktiv";
+
+            } catch (error) {
+                console.error("Fehler beim Abrufen der Live-Daten:", error);
+                statusText.innerText = "Fehler beim Laden!";
+            }
+        }
+
+        // Karte initialisieren, wenn die Seite geladen wird
+        window.onload = () => {
+            initMap();
+        };
+    </script>
+</body>
+</html>
