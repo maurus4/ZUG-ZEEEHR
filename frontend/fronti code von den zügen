@@ -97,8 +97,50 @@
 
         #map {
             width: 100%;
-            height: 100%;
+            flex: 1; /* Geändert von height: 100%, damit Platz für die Liste bleibt */
+            min-height: 0;
             background: #e0e0e0;
+        }
+
+        /* NEU: Styling für die Liste der verspäteten Züge */
+        #train-list-container {
+            height: 250px;
+            flex-shrink: 0;
+            background-color: var(--sbb-white);
+            border-top: 3px solid var(--sbb-red);
+            padding: 1rem 2rem;
+            overflow-y: auto;
+        }
+
+        #train-list-container h3 {
+            color: var(--sbb-anthracite);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        #train-list {
+            list-style: none;
+        }
+
+        #train-list li {
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #E5E5E5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #train-list li:last-child {
+            border-bottom: none;
+        }
+
+        .list-delay {
+            color: var(--sbb-white);
+            background-color: var(--sbb-red);
+            padding: 0.2rem 0.6rem;
+            border-radius: var(--border-radius);
+            font-weight: bold;
+            font-size: 0.9rem;
         }
 
         .leaflet-popup-content-wrapper {
@@ -156,6 +198,10 @@
                 top: 10px;
                 left: 20px;
             }
+            #train-list-container {
+                height: 200px;
+                padding: 1rem;
+            }
         }
     </style>
 </head>
@@ -181,6 +227,14 @@
         </div>
 
         <div id="map"></div>
+        
+        <!-- NEU: Container für die Liste der verspäteten Züge -->
+        <div id="train-list-container">
+            <h3>Liste der verspäteten Züge</h3>
+            <ul id="train-list">
+                <li style="color: var(--sbb-grey); border: none;">Noch keine Daten geladen.</li>
+            </ul>
+        </div>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -192,10 +246,19 @@
         let markers = [];
 
         function initMap() {
-            // Initialisiert die Karte zentriert auf die Schweiz
+            // Begrenzungen für die Schweiz (ungefähr: Südwest, Nordost)
+            const bounds = [
+                [45.8, 5.9], // Südwesten 
+                [47.8, 10.5] // Nordosten 
+            ];
+
+            // Initialisiert die Karte zentriert auf die Schweiz mit Begrenzungen
             map = L.map('map', { 
                 zoomControl: true, 
-                attributionControl: false 
+                attributionControl: false,
+                maxBounds: bounds,
+                maxBoundsViscosity: 1.0, // Verhindert das "Hinausziehen" über die Grenzen
+                minZoom: 7 // Verhindert zu weites Herauszoomen
             }).setView([46.8182, 8.2275], 8);
 
             // Lädt die Kacheln für die Karte
@@ -228,12 +291,16 @@
             const statusText = document.getElementById('status-text');
             const countDisplay = document.getElementById('delayed-count');
             const worstDisplay = document.getElementById('worst-connection');
+            const trainListDisplay = document.getElementById('train-list'); // NEU
             
             statusText.innerText = "Lade Daten aus Backend...";
 
             // Vorhandene Marker von der Karte löschen
             markers.forEach(m => map.removeLayer(m));
             markers = [];
+            
+            // NEU: Liste leeren vor dem neuen Befüllen
+            trainListDisplay.innerHTML = ''; 
 
             try {
                 // Frontend holt Daten NUR aus dem Backend (view-live Route)
@@ -257,6 +324,15 @@
                             worstTrain = train;
                         }
 
+                        // NEU: Zug zur HTML-Liste hinzufügen
+                        const trainName = train.trip_id.split('_')[0];
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `
+                            <span><strong>${trainName}</strong> | ${train.origin} &rarr; ${train.destination}</span> 
+                            <span class="list-delay">+${delay} Min.</span>
+                        `;
+                        trainListDisplay.appendChild(listItem);
+
                         // Zug auf der Karte einzeichnen (nutzt die Koordinaten aus der Datenbank)
                         if (train.latitude && train.longitude) {
                             const marker = L.circleMarker([train.latitude, train.longitude], {
@@ -269,7 +345,7 @@
 
                             // Popup mit Infos aus dem Backend
                             marker.bindPopup(`
-                                <div class="train-popup-title">${train.trip_id.split('_')[0]}</div>
+                                <div class="train-popup-title">${trainName}</div>
                                 <b>Verspätung: <span style="color:var(--sbb-red)">+${delay} Min.</span></b><br>
                                 Von: ${train.origin}<br>
                                 Nach: ${train.destination}
@@ -279,6 +355,11 @@
                         }
                     }
                 });
+
+                // Falls keine Verspätungen vorhanden sind, eine Nachricht in der Liste anzeigen
+                if (delayedCount === 0) {
+                    trainListDisplay.innerHTML = '<li style="color: var(--sbb-grey); border: none;">Aktuell keine verspäteten Züge.</li>';
+                }
 
                 // UI-Statistiken aktualisieren
                 countDisplay.innerText = delayedCount;
@@ -294,6 +375,7 @@
             } catch (error) {
                 console.error("Fehler beim Abrufen der Live-Daten:", error);
                 statusText.innerText = "Fehler beim Laden!";
+                trainListDisplay.innerHTML = '<li style="color: var(--sbb-red); border: none;">Fehler beim Laden der Liste.</li>';
             }
         }
 
