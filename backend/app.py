@@ -37,8 +37,8 @@ def sync_trains():
         live_query = """
             INSERT INTO active_trains (trip_id, origin, destination, delay, latitude, longitude, route_data)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE 
-                delay = VALUES(delay), latitude = VALUES(latitude), 
+            ON DUPLICATE KEY UPDATE
+                delay = VALUES(delay), latitude = VALUES(latitude),
                 longitude = VALUES(longitude), origin = VALUES(origin), updated_at = CURRENT_TIMESTAMP
         """
 
@@ -58,34 +58,6 @@ def sync_trains():
                 current_station = item.get('station', {}).get('name', 'Unbekannt')
                 coords = train.get('stop', {}).get('station', {}).get('coordinate', {})
                 lat, lon = coords.get('x', 0.0), coords.get('y', 0.0)
-
-                # --- VERBESSERTE INTERPOLATION ---
-                for i in range(len(pass_list) - 1):
-                    stop_a = pass_list[i]
-                    stop_b = pass_list[i+1]
-                    
-                    time_a = parse_sbb_date(stop_a.get('departure') or stop_a.get('arrival'))
-                    time_b = parse_sbb_date(stop_b.get('arrival'))
-                    
-                    if time_a and time_b:
-                        if time_a <= now <= time_b:
-                            # Wir sind zwischen zwei Bahnhöfen!
-                            diff = (time_b - time_a).total_seconds()
-                            elapsed = (now - time_a).total_seconds()
-                            progress = elapsed / diff if diff > 0 else 0
-                            
-                            c_a = stop_a.get('station', {}).get('coordinate', {})
-                            c_b = stop_b.get('station', {}).get('coordinate', {})
-                            
-                            lat = c_a.get('x', 0.0) + (c_b.get('x', 0.0) - c_a.get('x', 0.0)) * progress
-                            lon = c_a.get('y', 0.0) + (c_b.get('y', 0.0) - c_a.get('y', 0.0)) * progress
-                            current_station = f"Zwischen {stop_a['station']['name']} und {stop_b['station']['name']}"
-                            break
-                        elif now > time_b:
-                            # Zug ist schon an Station B vorbei
-                            current_station = stop_b['station']['name']
-                            lat = stop_b['station']['coordinate']['x']
-                            lon = stop_b['station']['coordinate']['y']
 
                 raw_delay = train.get('stop', {}).get('delay')
                 delay = int(raw_delay) if raw_delay is not None else 0
