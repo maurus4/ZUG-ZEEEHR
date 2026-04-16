@@ -17,62 +17,102 @@ API_CONNECTOR_URL = "http://api:5000/api/radar"
 
 @app.route('/sync-trains', methods=['GET'])
 def sync_trains():
+    conn = None
     try:
-        response = requests.get(API_CONNECTOR_URL)
+        # 1. Daten vom API-Connector (Port 5000) abrufen
+        response = requests.get(API_CONNECTOR_URL, timeout=15)
+        response.raise_for_status()
         raw_data = response.json().get('data', [])
         
         if not raw_data:
             return jsonify({"status": "error", "message": "Keine Daten von API erhalten"}), 500
 
+        # 2. DB-Verbindung aufbauen
         conn = mysql.connector.connect(**DB_CONFIG)
         cursor = conn.cursor()
 
-        # LIVE-Tabelle leeren für frische Daten
+        # 3. Operational Reset: Live-Tabelle leeren
+        # Damit entfernen wir Züge, die nicht mehr aktuell im Netz sind.
         cursor.execute("TRUNCATE TABLE active_trains")
 
+        # SQL-Statements vorbereiten
         live_query = """
             INSERT INTO active_trains (trip_id, origin, destination, delay, latitude, longitude, route_data)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE delay = VALUES(delay)
+            ON DUPLICATE KEY UPDATE 
+                delay = VALUES(delay),
+                updated_at = CURRENT_TIMESTAMP
         """
         
         archive_query = """
-            INSERT IGNORE INTO delay_archive (trip_id, origin, destination, delay, route_data)
+            INSERT INTO delay_archive (trip_id, origin, destination, delay, route_data)
             VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+                delay = VALUES(delay),
+                recorded_at = CURRENT_TIMESTAMP
         """
 
         sync_count = 0
         for item in raw_data:
-            station_name = item.get('station', {}).get('name', 'Unbekannt')
+            # Der Hub, an dem die Daten abgegriffen wurden (z.B. Zürich HB)
+            hub_name = item.get('station', {}).get('name', 'Unbekannt')
+            
             for train in item.get('stationboard', []):
-                # ID erstellen: Zugname + Ziel (macht es über Hubs hinweg eindeutiger)
-                train_name = f"{train.get('category', '')}{train.get('number', '')}"
-                destination = train.get('to', 'Unbekannt')
-                trip_id = f"{train_name}_{destination}"
+                # Eindeutige ID: Name des Zuges + Endstation (stabil über mehrere Hubs)
+                train_id_name = f"{train.get('category', '')}{train.get('number', '')}"
+                dest_name = train.get('to', 'Unbekannt')
+                trip_id = f"{train_id_name}_{dest_name}"
                 
-                # Koordinaten extrahieren
+                # Verspätung und PassList extrahieren
+                raw_delay = train.get('stop', {}).get('delay')
+                delay = int(raw_delay) if raw_delay is not None else 0
+                pass_list_json = json.dumps(train.get('passList', []))
+
+                # --- LOGIK A: ARCHIVIERUNG (Unabhängig von Koordinaten) ---
+                # Wenn der Zug die 20-Minuten-Marke knackt, wird er archiviert oder geupdated
+                if delay >= 20:
+                    cursor.execute(archive_query, (
+                        trip_id, 
+                        hub_name, 
+                        dest_name, 
+                        delay, 
+                        pass_list_json
+                    ))
+
+                # --- LOGIK B: LIVE-RADAR (Benötigt Koordinaten für die Karte) ---
                 coords = train.get('stop', {}).get('station', {}).get('coordinate', {})
                 lat, lon = coords.get('x'), coords.get('y')
                 
-                raw_delay = train.get('stop', {}).get('delay')
-                delay = int(raw_delay) if raw_delay is not None else 0
-
                 if lat and lon:
-                    # 1. In Live-Tabelle schreiben
-                    cursor.execute(live_query, (trip_id, station_name, destination, delay, lat, lon, json.dumps(train.get('passList', []))))
-                    
-                    # 2. Ins Archiv, wenn Verspätung >= 20
-                    if delay >= 20:
-                        cursor.execute(archive_query, (trip_id, station_name, destination, delay, json.dumps(train.get('passList', []))))
-                    
+                    cursor.execute(live_query, (
+                        trip_id, 
+                        hub_name, 
+                        dest_name, 
+                        delay, 
+                        lat, 
+                        lon, 
+                        pass_list_json
+                    ))
                     sync_count += 1
 
+        # 4. Transaktion abschliessen
         conn.commit()
         cursor.close()
-        conn.close()
-        return jsonify({"status": "success", "message": f"{sync_count} Züge aktualisiert."}), 200
+        
+        return jsonify({
+            "status": "success", 
+            "message": f"Sync abgeschlossen. {sync_count} Züge live. Archiv-Check durchgeführt."
+        }), 200
+
     except Exception as e:
+        if conn:
+            conn.rollback() # Bei Fehlern alles zurücksetzen
+        print(f"CRITICAL SYNC ERROR: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
 
 @app.route('/view-live', methods=['GET'])
 def view_live():
