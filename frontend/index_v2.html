@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SBB | Live Verspätungs-Radar</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --sbb-red: #EB0000;
+            --sbb-anthracite: #2D2D2D;
+            --sbb-white: #FFFFFF;
+            --sbb-light-grey: #F6F6F6;
+            --sbb-grey: #666666;
+            --nordic-bg: #F0F2F5;
+            --border-radius: 2px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "SBB Web", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--nordic-bg);
+            color: var(--sbb-anthracite);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--sbb-white);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #E5E5E5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-weight: 900;
+            font-size: 1.2rem;
+            letter-spacing: -0.5px;
+            color: var(--sbb-red);
+            text-transform: uppercase;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-left: 4px solid var(--sbb-red);
+            width: 320px;
+            backdrop-filter: blur(5px);
+        }
+
+        .label {
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            color: var(--sbb-grey);
+            margin-bottom: 0.5rem;
+            display: block;
+            font-weight: 700;
+        }
+
+        .count-value {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: var(--sbb-red);
+            line-height: 1;
+        }
+
+        .sub-label {
+            font-size: 0.85rem;
+            color: var(--sbb-grey);
+            margin-bottom: 1rem;
+        }
+
+        #map {
+            width: 100%;
+            flex: 1;
+            min-height: 0;
+            background: #e0e0e0;
+        }
+
+        #train-list-container {
+            height: 250px;
+            flex-shrink: 0;
+            background-color: var(--sbb-white);
+            border-top: 3px solid var(--sbb-red);
+            padding: 1rem 2rem;
+            overflow-y: auto;
+        }
+
+        #train-list-container h3 {
+            color: var(--sbb-anthracite);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        #train-list {
+            list-style: none;
+        }
+
+        #train-list li {
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #E5E5E5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .list-delay {
+            color: var(--sbb-white);
+            background-color: var(--sbb-red);
+            padding: 0.2rem 0.6rem;
+            border-radius: var(--border-radius);
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .btn-live {
+            background-color: var(--sbb-red);
+            color: var(--sbb-white);
+            border: none;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border-radius: var(--border-radius);
+        }
+
+        .city-label {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            color: var(--sbb-anthracite);
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-shadow: 1px 1px 3px white;
+            opacity: 0.7;
+        }
+
+        .city-label::before { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">SBB CFF FFS | Live Radar</div>
+        <div class="btn-group">
+            <span id="status-text" style="font-size: 0.75rem; color: var(--sbb-grey); margin-right: 10px;">Bereit</span>
+            <button onclick="triggerBackendSync()" class="btn-live">Radar aktualisieren</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="stats-panel">
+            <span class="label">Netzwerk-Status</span>
+            <div id="delayed-count" class="count-value">0</div>
+            <div class="sub-label">Verspätete Züge (Live)</div>
+            <div id="worst-connection" style="font-size: 0.85rem; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;">
+                Warte auf Datenabruf...
+            </div>
+        </div>
+
+        <div id="map"></div>
+        
+        <div id="train-list-container">
+            <h3>Liste der verspäteten Züge</h3>
+            <ul id="train-list">
+                <li style="color: var(--sbb-grey); border: none;">Noch keine Daten geladen.</li>
+            </ul>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const BACKEND_URL = 'http://localhost:8080';
+        let map;
+        let markers = [];
+
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: true,
+                attributionControl: false,
+                minZoom: 7
+            }).setView([46.8182, 8.2275], 8);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png').addTo(map);
+        }
+
+        async function triggerBackendSync() {
+            document.getElementById('status-text').innerText = "Sync läuft...";
+            try {
+                await fetch(`${BACKEND_URL}/sync-trains`);
+                loadDelaysFromBackend();
+            } catch (error) {
+                document.getElementById('status-text').innerText = "Sync Fehler!";
+            }
+        }
+
+        async function loadDelaysFromBackend() {
+            const statusText = document.getElementById('status-text');
+            const countDisplay = document.getElementById('delayed-count');
+            const worstDisplay = document.getElementById('worst-connection');
+            const trainListDisplay = document.getElementById('train-list');
+            
+            statusText.innerText = "Lade Live-Daten...";
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            trainListDisplay.innerHTML = '';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/view-live`);
+                const trains = await response.json();
+
+                // Sortierung: Höchste Verspätung zuerst
+                trains.sort((a, b) => (parseInt(b.delay) || 0) - (parseInt(a.delay) || 0));
+                
+                let delayedCount = 0;
+                let maxDelay = 0;
+                let worstTrain = null;
+                
+                // Zeit-Schwellenwert: 10 Minuten (in Millisekunden)
+                const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+                trains.forEach(train => {
+                    const delay = parseInt(train.delay) || 0;
+                    const updatedAt = new Date(train.updated_at);
+
+                    // --- FRESHNESS FILTER ---
+                    // Ignoriere Züge, die nicht in den letzten 10 Min. aktualisiert wurden (Archiv-Leichen)
+                    if (updatedAt < tenMinutesAgo) return;
+
+                    if (delay > 0) {
+                        delayedCount++;
+                        if (delay > maxDelay) {
+                            maxDelay = delay;
+                            worstTrain = train;
+                        }
+
+                        // Liste befüllen
+                        const trainName = train.trip_id.split('_')[0];
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `
+                            <span><strong>${trainName}</strong> | ${train.origin} &rarr; ${train.destination}</span>
+                            <span class="list-delay">+${delay} Min.</span>
+                        `;
+                        trainListDisplay.appendChild(listItem);
+
+                        // Marker auf Karte (nutzt Bahnhofs-Koordinaten aus DB)
+                        if (train.latitude && train.longitude) {
+                            const marker = L.circleMarker([train.latitude, train.longitude], {
+                                radius: 6, // Fixer Radius für sauberes Bild
+                                fillColor: "var(--sbb-red)",
+                                stroke: false,
+                                fillOpacity: 0.8
+                            }).addTo(map);
+
+                            marker.bindTooltip(train.origin, {
+                                permanent: true,
+                                direction: 'right',
+                                className: 'city-label',
+                                offset: [10, 0]
+                            });
+                            markers.push(marker);
+                        }
+                    }
+                });
+
+                countDisplay.innerText = delayedCount;
+                if (worstTrain) {
+                    const trainName = worstTrain.trip_id.split('_')[0];
+                    worstDisplay.innerHTML = `<strong>Maximum: +${maxDelay} Min</strong><br>${trainName} nach ${worstTrain.destination}`;
+                } else {
+                    worstDisplay.innerHTML = "Keine aktuellen Verspätungen.";
+                    trainListDisplay.innerHTML = '<li>Keine verspäteten Züge im aktuellen Zeitfenster.</li>';
+                }
+                statusText.innerText = "Live";
+            } catch (error) {
+                statusText.innerText = "Fehler!";
+            }
+        }
+
+        window.onload = () => {
+            initMap();
+            loadDelaysFromBackend();
+        };
+    </script>
+</body>
+</html>
