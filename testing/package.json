@@ -1,0 +1,25 @@
+{
+  "name": "zug-zeeehr",
+  "version": "1.0.0",
+  "description": "http://localhost:8080/sync-trains \r http://localhost:8080/view-live \r http://localhost:8080/view-archive",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright test --reporter=html && playwright show-report"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AngInfBros/ZUG-ZEEEHR.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AngInfBros/ZUG-ZEEEHR/issues"
+  },
+  "homepage": "https://github.com/AngInfBros/ZUG-ZEEEHR#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}

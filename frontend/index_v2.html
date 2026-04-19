@@ -121,6 +121,19 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 0.5rem;
+        }
+
+        .list-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.2rem;
+        }
+
+        .list-departure {
+            font-size: 0.75rem;
+            color: var(--sbb-grey);
         }
 
         .list-delay {
@@ -256,7 +269,10 @@
 
             try {
                 const response = await fetch(`${BACKEND_URL}/view-live`);
-                if (!response.ok) throw new Error("Backend nicht erreichbar");
+                if (!response.ok) {
+                    console.warn(`Backend antwortete mit Status ${response.status}`);
+                    throw new Error(`Backend-Fehler: HTTP ${response.status}`);
+                }
                 
                 const trains = await response.json();
 
@@ -281,11 +297,21 @@
                         // TripID splitten (Erwartet Format: NAME_ZIEL)
                         const trainName = train.trip_id.includes('_') ? train.trip_id.split('_')[0] : train.trip_id;
 
+                        // Abfahrtszeit formatieren (ISO 8601 → HH:MM Lokalzeit)
+                        let departureLabel = '';
+                        if (train.departure_time) {
+                            const dt = new Date(train.departure_time);
+                            departureLabel = dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+                        }
+
                         // Liste befüllen
                         const listItem = document.createElement('li');
                         listItem.innerHTML = `
-                            <span><strong>${trainName}</strong> | ${train.origin} &rarr; ${train.destination}</span> 
-                            <span class="list-delay">+${delay} Min.</span>
+                            <span><strong>${trainName}</strong> | ${train.origin} &rarr; ${train.destination}</span>
+                            <span class="list-meta">
+                                <span class="list-delay">+${delay} Min.</span>
+                                ${departureLabel ? `<span class="list-departure">Ab ${departureLabel}</span>` : ''}
+                            </span>
                         `;
                         trainListDisplay.appendChild(listItem);
 
@@ -338,15 +364,15 @@
             } catch (error) {
                 console.error("Fetch Error:", error);
                 statusText.innerText = "Fehler beim Laden!";
-                trainListDisplay.innerHTML = '<li style="color: var(--sbb-red); border: none;">Backend Verbindung fehlgeschlagen.</li>';
+                trainListDisplay.innerHTML = '<li style="color: var(--sbb-red); border: none;">Fehler: Backend Verbindung fehlgeschlagen.</li>';
             }
         }
 
         window.onload = () => {
             initMap();
             loadDelaysFromBackend();
-            // Optional: Alle 60 Sekunden automatisch aktualisieren
-            // setInterval(loadDelaysFromBackend, 60000);
+            // Alle 60 Sekunden automatisch neu laden (ohne vollen Sync)
+            setInterval(loadDelaysFromBackend, 60000);
         };
     </script>
 </body>
