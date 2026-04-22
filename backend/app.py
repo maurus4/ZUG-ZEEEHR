@@ -14,9 +14,7 @@ DB_CONFIG: dict = {
     'database': 'sbb_data',
 }
 API_CONNECTOR_URL = "http://api:5000/api/radar"
-
 ARCHIVE_DELAY_THRESHOLD = 20
-
 
 def parse_departure(raw: str | None) -> str | None:
     """Parse ISO 8601 departure string from the transport API.
@@ -53,7 +51,6 @@ def extract_train_record(train: dict, hub_name: str) -> dict | None:
         'latitude': lat,
         'longitude': lon,
     }
-
 
 @app.route('/sync-trains', methods=['GET'])
 def sync_trains():
@@ -157,7 +154,7 @@ def view_live():
                 CAST(longitude AS CHAR) AS longitude
             FROM active_trains
             WHERE departure_time IS NULL
-               OR departure_time >= NOW() - INTERVAL 30 MINUTE
+               OR departure_time >= NOW() - INTERVAL 60 MINUTE
         """)
         data: list[dict] = cursor.fetchall()
         cursor.close()
